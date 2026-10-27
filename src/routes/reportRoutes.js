@@ -5,6 +5,7 @@ import {
   getMyReports,
   getPublicDashboardStats,
   getReports,
+  getSpamReports,
   updateReportMeta,
   updateReportStatus,
 } from "../controllers/reportController.js";
@@ -14,6 +15,7 @@ const router = Router();
 
 router.get("/summary", getPublicDashboardStats);
 router.get("/", getReports);
+router.get("/spam", protect, adminOnly, getSpamReports);
 router.get("/my", protect, getMyReports);
 router.post("/", createReport);
 

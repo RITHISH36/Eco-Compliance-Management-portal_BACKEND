@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import Report from "../models/Report.js";
+import { CAMPUS_BLOCK_COORDS, getCampusBlockCoords } from "../utils/campusBlocks.js";
 import { generateReportNumber } from "../utils/reportNumber.js";
 
 const demoUsers = [
@@ -164,6 +165,48 @@ export const ensureDemoCampusData = async () => {
     reporterEmail: { $in: demoUsers.map((user) => user.email.toLowerCase()) },
   });
 
+  await Report.updateMany(
+    { block: { $exists: true } },
+    [
+      {
+        $set: {
+          latitude: {
+            $switch: {
+              branches: Object.entries(CAMPUS_BLOCK_COORDS).map(([block, coordinates]) => ({
+                case: { $eq: ["$block", block] },
+                then: coordinates.latitude,
+              })),
+              default: CAMPUS_BLOCK_COORDS.Others.latitude,
+            },
+          },
+          longitude: {
+            $switch: {
+              branches: Object.entries(CAMPUS_BLOCK_COORDS).map(([block, coordinates]) => ({
+                case: { $eq: ["$block", block] },
+                then: coordinates.longitude,
+              })),
+              default: CAMPUS_BLOCK_COORDS.Others.longitude,
+            },
+          },
+        },
+      },
+    ]
+  );
+
+  await Promise.all(
+    demoReports.map((item) => {
+      const coordinates = getCampusBlockCoords(item.block);
+      return Report.updateOne(
+        {
+          type: item.type,
+          block: item.block,
+          reporterEmail: item.reporterEmail.toLowerCase(),
+        },
+        { $set: coordinates }
+      );
+    })
+  );
+
   if (existingDemoReports >= demoReports.length) return;
 
   let currentCount = await Report.countDocuments();
@@ -183,6 +226,7 @@ export const ensureDemoCampusData = async () => {
     const inProgressAt = new Date(reportedAt.getTime() + 18 * 60 * 60 * 1000);
     const resolvedAt = new Date(reportedAt.getTime() + 42 * 60 * 60 * 1000);
     const location = item.spot ? `${item.block} - ${item.spot}` : `${item.block} - General Area`;
+    const coords = getCampusBlockCoords(item.block);
 
     const timeline = [
       { date: reportedAt.toLocaleString("en-IN"), text: "Reported" },
@@ -212,8 +256,8 @@ export const ensureDemoCampusData = async () => {
       tone: item.tone,
       location,
       block: item.block,
-      latitude: null,
-      longitude: null,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
       assignedWorker: item.department,
       department: item.department,
       ecoMember: item.ecoMember,

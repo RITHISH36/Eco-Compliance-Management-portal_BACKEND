@@ -3,7 +3,10 @@ import Report from "../models/Report.js";
 
 export const getUsers = async (req, res) => {
   const users = await User.find({ role: "user" }).select("-passwordHash");
-  const reports = await Report.find({}, "reporterEmail contactInfo");
+  const reports = await Report.find(
+    { isSpam: { $ne: true } },
+    "reporterEmail contactInfo"
+  );
   const reportByEmail = reports.reduce((acc, item) => {
     const key = String(item.reporterEmail || item.contactInfo || "").toLowerCase().trim();
     if (!key) return acc;

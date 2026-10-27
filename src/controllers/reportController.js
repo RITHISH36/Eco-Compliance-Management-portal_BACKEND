@@ -1,8 +1,9 @@
 import Report from "../models/Report.js";
 import cloudinary, { isCloudinaryConfigured } from "../config/cloudinary.js";
-import { normalizeCampusBlock } from "../utils/campusBlocks.js";
+import { getCampusBlockCoords, isWithinCampus, normalizeCampusBlock } from "../utils/campusBlocks.js";
 import { generateReportNumber } from "../utils/reportNumber.js";
 import User from "../models/User.js";
+import { detectDuplicateReport } from "../services/duplicateDetection.js";
 
 const nowISO = () => new Date().toISOString();
 const dateLabel = () => new Date().toISOString().slice(0, 10);
@@ -101,7 +102,7 @@ const uploadReportImages = async (images = []) => {
 
 export const getReports = async (req, res) => {
   const { status, category, block, q } = req.query;
-  const filter = {};
+  const filter = { isSpam: { $ne: true } };
   if (status) filter.status = status;
   if (category) filter.category = category;
   if (block) filter.block = normalizeCampusBlock(block);
@@ -116,10 +117,15 @@ export const getReports = async (req, res) => {
   return res.json(reports);
 };
 
+export const getSpamReports = async (_req, res) => {
+  const reports = await Report.find({ isSpam: true }).sort({ createdAt: -1 });
+  return res.json(reports);
+};
+
 export const getPublicDashboardStats = async (_req, res) => {
   const [totalReports, resolvedReports, activeUsers] = await Promise.all([
-    Report.countDocuments(),
-    Report.countDocuments({ status: "Resolved" }),
+    Report.countDocuments({ isSpam: { $ne: true } }),
+    Report.countDocuments({ status: "Resolved", isSpam: { $ne: true } }),
     User.countDocuments({ role: "user", disabled: false }),
   ]);
 
@@ -147,6 +153,7 @@ export const getMyReports = async (req, res) => {
   }
 
   const reports = await Report.find({
+    isSpam: { $ne: true },
     $or: filters,
   }).sort({ createdAt: -1 });
 
@@ -177,8 +184,26 @@ export const createReport = async (req, res) => {
     const count = await Report.countDocuments();
     const reportNumber = generateReportNumber(count);
     const normalizedBlock = normalizeCampusBlock(block);
+    const blockCoords = getCampusBlockCoords(normalizedBlock);
     const location = spot ? `${normalizedBlock} - ${spot}` : `${normalizedBlock} - General Area`;
     const reportedAt = nowISO();
+    const duplicateCandidates = await Report.find({
+      location,
+      status: { $ne: "Resolved" },
+      isSpam: { $ne: true },
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+    const duplicateCheck = await detectDuplicateReport(
+      {
+        type,
+        category: category || type,
+        location,
+        description,
+      },
+      duplicateCandidates
+    );
     const uploadedImages = await uploadReportImages(images);
 
     const report = await Report.create({
@@ -191,8 +216,8 @@ export const createReport = async (req, res) => {
       tone: "pending",
       location,
       block: normalizedBlock,
-      latitude: typeof latitude === "number" ? latitude : null,
-      longitude: typeof longitude === "number" ? longitude : null,
+      latitude: isWithinCampus(latitude, longitude) ? latitude : blockCoords.latitude,
+      longitude: isWithinCampus(latitude, longitude) ? longitude : blockCoords.longitude,
       assignedWorker: "Unassigned",
       department: "Unassigned",
       ecoMember,
@@ -202,6 +227,11 @@ export const createReport = async (req, res) => {
       assigneeContact: String(assigneeContact || "").trim(),
       internalNotes: "",
       description,
+      isSpam: duplicateCheck.isDuplicate,
+      duplicateOf: duplicateCheck.duplicateReportNumber,
+      duplicateReason: duplicateCheck.reason,
+      duplicateConfidence: duplicateCheck.confidence,
+      duplicateDetectionSource: duplicateCheck.source,
       images: uploadedImages.length
         ? uploadedImages
         : [{ src: "/backgroundimg.jpg", name: "no-image.jpg" }],
@@ -225,7 +255,7 @@ export const updateReportStatus = async (req, res) => {
   const valid = ["Pending", "In Progress", "Resolved", "Reopened"];
   if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status" });
 
-  const report = await Report.findOne({ reportNumber: id });
+  const report = await Report.findOne({ reportNumber: id, isSpam: { $ne: true } });
   if (!report) return res.status(404).json({ message: "Report not found" });
 
   const flow = report.adminFlow || {};
@@ -254,7 +284,7 @@ export const updateReportStatus = async (req, res) => {
 export const updateReportMeta = async (req, res) => {
   const { id } = req.params;
   const { department, ecoMember, contactInfo, assigneeContact, internalNotes } = req.body;
-  const report = await Report.findOne({ reportNumber: id });
+  const report = await Report.findOne({ reportNumber: id, isSpam: { $ne: true } });
   if (!report) return res.status(404).json({ message: "Report not found" });
 
   const flow = report.adminFlow || {};
@@ -281,7 +311,7 @@ export const addInternalNote = async (req, res) => {
   const { note } = req.body;
   if (!note || !String(note).trim()) return res.status(400).json({ message: "note is required" });
 
-  const report = await Report.findOne({ reportNumber: id });
+  const report = await Report.findOne({ reportNumber: id, isSpam: { $ne: true } });
   if (!report) return res.status(404).json({ message: "Report not found" });
   const prefix = `[${new Date().toLocaleString("en-IN")}] `;
   report.internalNotes = `${report.internalNotes || ""}\n${prefix}${note}`.trim();
