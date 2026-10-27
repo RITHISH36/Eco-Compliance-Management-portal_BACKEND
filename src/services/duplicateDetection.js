@@ -60,8 +60,8 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
   console.log("========== DUPLICATE DETECTION START ==========");
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   console.log("API Key exists:", !!apiKey);
-console.log("API Key length:", apiKey?.length);
-console.log("Model:", process.env.GEMINI_MODEL);
+  console.log("API Key length:", apiKey?.length || 0);
+  console.log("Candidates:", candidates.length);
   if (!apiKey) {
     console.warn("[Duplicate Detection] Gemini skipped: GEMINI_API_KEY is not configured.");
     return fallbackResult();
@@ -72,6 +72,7 @@ console.log("Model:", process.env.GEMINI_MODEL);
   }
 
   const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.1-flash-lite";
+  console.log("Calling Gemini with model:", model);
   const allowedReportNumbers = new Set(candidates.map((item) => String(item.reportNumber)));
   const systemPrompt = [
     "You detect repeated campus maintenance reports.",
@@ -118,7 +119,7 @@ console.log("Model:", process.env.GEMINI_MODEL);
           },
           body: JSON.stringify(requestBody),
         });
-console.log("Gemini Status:", response.status);
+        console.log("Gemini Status:", response.status);
         if (!response.ok) {
           const retryable = response.status === 408 || response.status >= 500;
           const errorBody = await response.json().catch(() => ({}));
@@ -131,7 +132,6 @@ console.log("Gemini Status:", response.status);
         }
 
         const body = await response.json();
-        console.log(JSON.stringify(body, null, 2));
         const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
         const result = normalResult(parseGeminiJson(text || ""));
 

@@ -188,13 +188,16 @@ export const createReport = async (req, res) => {
     const location = spot ? `${normalizedBlock} - ${spot}` : `${normalizedBlock} - General Area`;
     const reportedAt = nowISO();
     const duplicateCandidates = await Report.find({
-      location,
+      block: normalizedBlock,
       status: { $ne: "Resolved" },
       isSpam: { $ne: true },
     })
       .sort({ createdAt: -1 })
       .limit(10)
       .lean();
+    console.info(
+      `[Duplicate Detection] Candidate scan: block=${normalizedBlock} | location=${location} | candidates=${duplicateCandidates.length}`
+    );
     const duplicateCheck = await detectDuplicateReport(
       {
         type,
