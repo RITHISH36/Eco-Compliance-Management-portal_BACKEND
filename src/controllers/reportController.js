@@ -185,7 +185,8 @@ export const createReport = async (req, res) => {
     const reportNumber = generateReportNumber(count);
     const normalizedBlock = normalizeCampusBlock(block);
     const blockCoords = getCampusBlockCoords(normalizedBlock);
-    const location = spot ? `${normalizedBlock} - ${spot}` : `${normalizedBlock} - General Area`;
+    const specificSpot = String(spot || "").trim() || "General Area";
+    const location = `${normalizedBlock} - ${specificSpot}`;
     const reportedAt = nowISO();
     const duplicateCandidates = await Report.find({
       block: normalizedBlock,
@@ -200,8 +201,8 @@ export const createReport = async (req, res) => {
     );
     const duplicateCheck = await detectDuplicateReport(
       {
-        type,
-        category: category || type,
+        block: normalizedBlock,
+        spot: specificSpot,
         location,
         description,
       },
@@ -219,6 +220,7 @@ export const createReport = async (req, res) => {
       tone: "pending",
       location,
       block: normalizedBlock,
+      spot: specificSpot,
       latitude: isWithinCampus(latitude, longitude) ? latitude : blockCoords.latitude,
       longitude: isWithinCampus(latitude, longitude) ? longitude : blockCoords.longitude,
       assignedWorker: "Unassigned",

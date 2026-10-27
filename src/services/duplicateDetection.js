@@ -4,11 +4,17 @@ const MAX_GEMINI_ATTEMPTS = 3;
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const normalReport = (report) => ({
+const specificSpot = (report = {}) => {
+  if (report.spot !== undefined && report.spot !== null) return String(report.spot).trim();
+  const location = String(report.location || "");
+  const separator = location.indexOf(" - ");
+  return separator >= 0 ? location.slice(separator + 3).trim() : "";
+};
+
+const duplicateComparisonReport = (report) => ({
   reportNumber: String(report.reportNumber || ""),
-  type: String(report.type || "").slice(0, 180),
-  category: String(report.category || "").slice(0, 120),
-  location: String(report.location || "").slice(0, 180),
+  block: String(report.block || "").slice(0, 80),
+  specificSpot: specificSpot(report).slice(0, 180),
   description: String(report.description || "").slice(0, 700),
 });
 
@@ -75,13 +81,12 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
   console.log("Calling Gemini with model:", model);
   const allowedReportNumbers = new Set(candidates.map((item) => String(item.reportNumber)));
   const systemPrompt = [
-    "You detect repeated campus maintenance reports.",
-    "Mark a report as a duplicate only when it is for the exact same campus location and the same unresolved physical issue as one candidate report.",
-    "The descriptions may use different words, but they must clearly describe the same problem. Exact repeated descriptions are duplicates.",
-    "A report from a different spot in the same block is not a duplicate. A matching category alone is not a duplicate.",
-    "A report for an issue that was resolved is not a duplicate because it may be a new occurrence.",
-    "When there is a clear match, choose the matching candidate report number. Otherwise set isDuplicate to false.",
-    "Do not use or infer reporter identity. Compare only the supplied report details.",
+    "You check duplicate campus reports.",
+    "Compare only block, specificSpot, and description. Do not use report title, category, reporter, date, image, or coordinates.",
+    "Mark isDuplicate true only when block and specificSpot are the same place and the descriptions describe the same issue.",
+    "Keep the submitted specificSpot wording as supplied. Do not rewrite or infer a different spot.",
+    "If the block or specificSpot differs, set isDuplicate to false.",
+    "When there is a duplicate, use that candidate's reportNumber. Otherwise set isDuplicate to false.",
     "Return JSON only with: isDuplicate (boolean), duplicateReportNumber (string), reason (string, maximum 120 characters), confidence (number from 0 to 1).",
     "Set isDuplicate to false when there is no clear match.",
   ].join(" ");
@@ -94,8 +99,8 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
         parts: [
           {
             text: JSON.stringify({
-              submittedReport: normalReport(newReport),
-              candidateReports: candidates.map(normalReport),
+              submittedReport: duplicateComparisonReport(newReport),
+              candidateReports: candidates.map(duplicateComparisonReport),
             }),
           },
         ],

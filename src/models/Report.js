@@ -43,6 +43,7 @@ const reportSchema = new mongoose.Schema(
     tone: { type: String, default: "pending" },
     location: { type: String, required: true },
     block: { type: String, enum: CAMPUS_BLOCKS, default: "Others" },
+    spot: { type: String, default: "General Area" },
     latitude: { type: Number, default: null },
     longitude: { type: Number, default: null },
     assignedWorker: { type: String, default: "Unassigned" },
