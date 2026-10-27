@@ -55,8 +55,9 @@ const parseGeminiJson = (text) => {
 
   throw new Error("Gemini returned incomplete JSON");
 };
-console.log("========== DUPLICATE DETECTION START ==========");
+
 export const detectDuplicateReport = async (newReport, candidates = []) => {
+  console.log("========== DUPLICATE DETECTION START ==========");
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   console.log("API Key exists:", !!apiKey);
 console.log("API Key length:", apiKey?.length);
