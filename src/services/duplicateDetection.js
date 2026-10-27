@@ -58,6 +58,9 @@ const parseGeminiJson = (text) => {
 
 export const detectDuplicateReport = async (newReport, candidates = []) => {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
+  console.log("API Key exists:", !!apiKey);
+console.log("API Key length:", apiKey?.length);
+console.log("Model:", process.env.GEMINI_MODEL);
   if (!apiKey) {
     console.warn("[Duplicate Detection] Gemini skipped: GEMINI_API_KEY is not configured.");
     return fallbackResult();
@@ -114,7 +117,7 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
           },
           body: JSON.stringify(requestBody),
         });
-
+console.log("Gemini Status:", response.status);
         if (!response.ok) {
           const retryable = response.status === 408 || response.status >= 500;
           const errorBody = await response.json().catch(() => ({}));
@@ -127,6 +130,7 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
         }
 
         const body = await response.json();
+        console.log(JSON.stringify(body, null, 2));
         const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
         const result = normalResult(parseGeminiJson(text || ""));
 
