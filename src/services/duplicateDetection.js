@@ -14,6 +14,7 @@ const specificSpot = (report = {}) => {
 const duplicateComparisonReport = (report) => ({
   reportNumber: String(report.reportNumber || ""),
   block: String(report.block || "").slice(0, 80),
+  issueTitle: String(report.type || "").slice(0, 180),
   specificSpot: specificSpot(report).slice(0, 180),
   description: String(report.description || "").slice(0, 700),
 });
@@ -82,10 +83,10 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
   const allowedReportNumbers = new Set(candidates.map((item) => String(item.reportNumber)));
   const systemPrompt = [
     "You check duplicate campus reports.",
-    "Compare only block, specificSpot, and description. Do not use report title, category, reporter, date, image, or coordinates.",
-    "Mark isDuplicate true only when block and specificSpot are the same place and the descriptions describe the same issue.",
+    "Compare only block, issueTitle, specificSpot, and description. Do not use category, reporter, date, image, or coordinates.",
+    "Mark isDuplicate true only when a candidate has the same block, issueTitle, specificSpot, and description as the submitted report.",
     "Keep the submitted specificSpot wording as supplied. Do not rewrite or infer a different spot.",
-    "If the block or specificSpot differs, set isDuplicate to false.",
+    "If any of block, issueTitle, specificSpot, or description differs, set isDuplicate to false.",
     "When there is a duplicate, use that candidate's reportNumber. Otherwise set isDuplicate to false.",
     "Return JSON only with: isDuplicate (boolean), duplicateReportNumber (string), reason (string, maximum 120 characters), confidence (number from 0 to 1).",
     "Set isDuplicate to false when there is no clear match.",

@@ -202,6 +202,7 @@ export const createReport = async (req, res) => {
     const duplicateCheck = await detectDuplicateReport(
       {
         block: normalizedBlock,
+        type,
         spot: specificSpot,
         location,
         description,
