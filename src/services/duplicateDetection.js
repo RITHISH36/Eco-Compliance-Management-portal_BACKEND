@@ -58,7 +58,14 @@ const parseGeminiJson = (text) => {
 
 export const detectDuplicateReport = async (newReport, candidates = []) => {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
-  if (!apiKey || !candidates.length) return fallbackResult();
+  if (!apiKey) {
+    console.warn("[Duplicate Detection] Gemini skipped: GEMINI_API_KEY is not configured.");
+    return fallbackResult();
+  }
+  if (!candidates.length) {
+    console.info("[Duplicate Detection] Skipped: no unresolved reports at this exact location.");
+    return fallbackResult();
+  }
 
   const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.1-flash-lite";
   const allowedReportNumbers = new Set(candidates.map((item) => String(item.reportNumber)));
@@ -110,7 +117,11 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
 
         if (!response.ok) {
           const retryable = response.status === 408 || response.status >= 500;
-          const error = new Error(`Gemini request failed with status ${response.status}`);
+          const errorBody = await response.json().catch(() => ({}));
+          const providerMessage = String(errorBody?.error?.message || "").slice(0, 280);
+          const error = new Error(
+            `Gemini request failed with status ${response.status}${providerMessage ? `: ${providerMessage}` : ""}`
+          );
           error.retryable = retryable;
           throw error;
         }
@@ -119,8 +130,20 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
         const text = body.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("");
         const result = normalResult(parseGeminiJson(text || ""));
 
-        if (!result.isDuplicate) return result;
-        return allowedReportNumbers.has(result.duplicateReportNumber) ? result : fallbackResult();
+        if (!result.isDuplicate) {
+          console.info(`[Duplicate Detection] Gemini decision: normal | model=${model} | candidates=${candidates.length}`);
+          return result;
+        }
+
+        if (allowedReportNumbers.has(result.duplicateReportNumber)) {
+          console.info(
+            `[Duplicate Detection] Gemini decision: duplicate | match=${result.duplicateReportNumber} | confidence=${result.confidence} | model=${model}`
+          );
+          return result;
+        }
+
+        console.warn("[Duplicate Detection] Gemini returned an invalid duplicate report number; using normal flow.");
+        return fallbackResult();
       } catch (error) {
         const canRetry = (error.retryable || error instanceof TypeError) && attempt < MAX_GEMINI_ATTEMPTS - 1;
         if (!canRetry) throw error;
@@ -129,7 +152,7 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
     }
   } catch (error) {
     // Gemini quota and API errors use the normal report flow.
-    console.warn("Gemini duplicate check skipped:", error.message);
+    console.warn("[Duplicate Detection] Gemini check failed; using normal flow:", error.message);
     return fallbackResult();
   }
 };
