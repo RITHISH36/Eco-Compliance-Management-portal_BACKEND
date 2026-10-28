@@ -74,7 +74,7 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
     return fallbackResult();
   }
   if (!candidates.length) {
-    console.info("[Duplicate Detection] Skipped: no unresolved reports in this block.");
+    console.info("[Duplicate Detection] Skipped: no previous normal reports are available.");
     return fallbackResult();
   }
 
