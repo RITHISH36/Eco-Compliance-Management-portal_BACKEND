@@ -7,6 +7,8 @@ import { detectDuplicateReport } from "../services/duplicateDetection.js";
 
 const nowISO = () => new Date().toISOString();
 const dateLabel = () => new Date().toISOString().slice(0, 10);
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const exactCaseInsensitive = (value) => new RegExp(`^${escapeRegex(String(value).trim())}$`, "i");
 
 const buildTimeline = (report) => {
   const flow = report.adminFlow || {};
@@ -190,14 +192,19 @@ export const createReport = async (req, res) => {
     const reportedAt = nowISO();
     const duplicateCandidates = await Report.find({
       isSpam: { $ne: true },
+      block: normalizedBlock,
+      type: exactCaseInsensitive(type),
+      $or: [
+        { spot: exactCaseInsensitive(specificSpot) },
+        { location: exactCaseInsensitive(location) },
+      ],
     })
       .sort({ createdAt: -1 })
-      .limit(25)
       .lean();
     console.info(
       `[Duplicate Detection] Submitted: block=${normalizedBlock} | title=${type} | spot=${specificSpot}`
     );
-    console.info(`[Duplicate Detection] Candidates found: ${duplicateCandidates.length}`);
+    console.info(`[Duplicate Detection] Matching title/spot candidates: ${duplicateCandidates.length}`);
     console.info(
       "[Duplicate Detection] Candidate IDs:",
       duplicateCandidates.map((candidate) => candidate.reportNumber).join(", ") || "none"

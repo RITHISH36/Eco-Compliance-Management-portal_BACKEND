@@ -1,5 +1,6 @@
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models";
 const MAX_GEMINI_ATTEMPTS = 3;
+const GEMINI_TIMEOUT_MS = Math.max(Number(process.env.GEMINI_TIMEOUT_MS) || 12000, 1000);
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -74,7 +75,7 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
     return fallbackResult();
   }
   if (!candidates.length) {
-    console.info("[Duplicate Detection] Skipped: no previous normal reports are available.");
+    console.info("[Duplicate Detection] Skipped: no prior reports match the same block, title, and specific spot.");
     return fallbackResult();
   }
 
@@ -117,14 +118,29 @@ export const detectDuplicateReport = async (newReport, candidates = []) => {
   try {
     for (let attempt = 0; attempt < MAX_GEMINI_ATTEMPTS; attempt += 1) {
       try {
-        const response = await fetch(`${GEMINI_URL}/${encodeURIComponent(model)}:generateContent`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": apiKey,
-          },
-          body: JSON.stringify(requestBody),
-        });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+        let response;
+        try {
+          response = await fetch(`${GEMINI_URL}/${encodeURIComponent(model)}:generateContent`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-goog-api-key": apiKey,
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+        } catch (error) {
+          if (error?.name === "AbortError") {
+            const timeoutError = new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+            timeoutError.retryable = true;
+            throw timeoutError;
+          }
+          throw error;
+        } finally {
+          clearTimeout(timeout);
+        }
         console.log("Gemini Status:", response.status);
         if (!response.ok) {
           const retryable = response.status === 408 || response.status >= 500;
